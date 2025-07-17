@@ -1,5 +1,6 @@
-const GROQ_API_KEY = 'YOUR_GROQ_API_KEY_HERE'; // Replace with your Groq API key from https://console.groq.com/keys
-const GENERATION_MODEL = 'llama-3.3-70b-versatile'; // Groq chat model (fast and powerful)
+// Configuration will be loaded from config.js
+const GROQ_API_KEY = CONFIG.GROQ_API_KEY;
+const GENERATION_MODEL = CONFIG.GROQ_MODEL;
 
 // Global variables
 let chunks = [];
@@ -10,7 +11,7 @@ let currentTheme = 'light';
 let chatDiv, input, sendBtn, statusDiv, loadingDiv, typingDiv, themeToggle, settingsBtn, charCount;
 
 // Function to split text into chunks (for RAG)
-function splitIntoChunks(text, chunkSize = 500) {
+function splitIntoChunks(text, chunkSize = CONFIG.DEFAULT_CHUNK_SIZE) {
   const chunks = [];
   for (let i = 0; i < text.length; i += chunkSize) {
     chunks.push(text.substring(i, i + chunkSize));
@@ -96,7 +97,7 @@ function setButtonState(enabled, text = 'Send') {
 }
 
 // Simple keyword-based search (no embeddings needed)
-function findRelevantChunks(query, chunks, maxChunks = 3) {
+function findRelevantChunks(query, chunks, maxChunks = CONFIG.MAX_CHUNKS) {
   const queryWords = query.toLowerCase().split(/\s+/).filter(word => word.length > 2);
   
   const scoredChunks = chunks.map((chunk, idx) => {
@@ -128,7 +129,7 @@ function findRelevantChunks(query, chunks, maxChunks = 3) {
 async function generateAnswer(query, relevantChunks) {
   try {
     const context = relevantChunks.join('\n\n');
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const response = await fetch(CONFIG.GROQ_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -140,8 +141,8 @@ async function generateAnswer(query, relevantChunks) {
           { role: 'system', content: 'You are a helpful assistant that answers questions based only on the provided context. Be concise but informative.' },
           { role: 'user', content: `Context: ${context}\n\nQuestion: ${query}` }
         ],
-        temperature: 0.3,
-        max_tokens: 1024
+        temperature: CONFIG.TEMPERATURE,
+        max_tokens: CONFIG.MAX_TOKENS
       })
     });
     
@@ -187,7 +188,7 @@ async function handleQuery() {
     const relevantChunks = findRelevantChunks(query, chunks);
     
     if (relevantChunks.length === 0) {
-      throw new Error('No relevant content found for your query.');
+      throw new Error(CONFIG.MESSAGES.ERROR_NO_RELEVANT);
     }
     
     // Generate answer
@@ -223,13 +224,13 @@ async function initializePageContext() {
     const response = await chrome.tabs.sendMessage(tab.id, { action: 'getPageContent' });
     
     if (!response || !response.text) {
-      throw new Error('Could not extract page content. Try refreshing the page.');
+      throw new Error(CONFIG.MESSAGES.ERROR_NO_CONTENT);
     }
     
     const pageText = response.text.trim();
     
     if (pageText.length < 50) {
-      throw new Error('Page content is too short. Make sure you\'re on a page with text content.');
+      throw new Error(CONFIG.MESSAGES.ERROR_SHORT_CONTENT);
     }
     
     updateStatus('Processing content...');
@@ -239,9 +240,9 @@ async function initializePageContext() {
     chunks = splitIntoChunks(pageText);
     
     setLoading(false);
-    updateStatus('Ready! Ask questions about this page.', 'success');
-    addMessage('', `✅ Page context loaded! Found ${chunks.length} chunks of content.`, 'system');
-    addMessage('', '💡 Ask me anything about this page - I\'ll find relevant information to answer your questions.', 'system');
+    updateStatus(CONFIG.MESSAGES.READY, 'success');
+    addMessage('', `${CONFIG.MESSAGES.PAGE_LOADED} Found ${chunks.length} chunks of content.`, 'system');
+    addMessage('', CONFIG.MESSAGES.HELP_HINT, 'system');
     
     // Focus on input
     input.focus();
@@ -253,7 +254,7 @@ async function initializePageContext() {
     addMessage('', error.message, 'error');
     
     if (error.message.includes('API key')) {
-      addMessage('', 'Get your Groq API key from: https://console.groq.com/keys', 'system');
+      addMessage('', CONFIG.MESSAGES.API_KEY_LINK, 'system');
     }
   }
 }
